@@ -80,6 +80,8 @@ IdleExitTimeout 60
 # Restrict access to the admin pages...
 <Location /admin>
   Encryption Required
+  AuthType Default
+  Require user @SYSTEM
   Order allow,deny
   Allow 10.0.0.0/24
 </Location>
