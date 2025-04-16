@@ -30,7 +30,7 @@ docker create ipp-ssl
 
 ### Deploying the Container
 ```
-docker run -d --name ipp-proxy \
+docker run -d --name ipp-proxy-cups \
 --hostname ipp \
 --restart unless-stopped \
 -p 631:631 \
@@ -39,10 +39,34 @@ docker run -d --name ipp-proxy \
 --tmpfs /run/cups \
 --tmpfs /var/spool/cups \
 --tmpfs /var/cache/cups \
-ipp-proxy-cups
+sebastiandanconia/ipp-proxy-cups
 ```
 
 After starting the container for the first time to populate the otherwise-empty `ipp-config` Docker volume, copy `cupsd.conf` to `/etc/cups` in the container. You can find examples of `cupsd.conf` in the `EXAMPLES` folder. `cupsd.conf` should be owned by `root:lp` within the container.
+
+### Docker-Compose
+As an alternative to running Docker directly, you can set up your `docker-compose.yaml` to something like this:
+```
+---
+services:
+  # CUPS application-level security proxy
+  ipp-proxy-cups:
+    image: sebastiandanconia/ipp-proxy-cups
+    container_name: ipp-proxy-cups
+    hostname: ipp
+    environment:
+      - TZ=Etc/UTC
+    volumes:
+      - ipp-config:/etc/cups
+      - ipp-ssl:/etc/cups/ssl
+    tmpfs:
+      - /run/cups
+      - /var/spool/cups
+      - /var/cache/cups
+    ports:
+      - "631:631"
+    restart: unless-stopped
+```
 
 ### Setting Root Passphrase (Optional)
 ```
@@ -82,13 +106,15 @@ if [[ "${RENEWED_DOMAINS}" == *"${DOMAIN}"* ]]; then
   cp --dereference "${LIVE_CERT_DIR}"/privkey.pem "${CUPS_CERT_DIR}"/ipp.key
   # NOOP: chown -R root:root "${CUPS_CERT_DIR}"
 
-  docker restart ipp-proxy
+  docker restart ipp-proxy-cups
 fi
 ```
 
+NOTE: CUPS expects its TLS certificate and key to be named based on  `$HOSTNAME`. This means that if you change the hostname within the Docker container to something other than "ipp", you should also modify the above script.
+
 ### Testing & Debugging
 ```
-docker exec -it ipp-proxy bash
+docker exec -it ipp-proxy-cups bash
 ```
 
 #### Without TLS (ipp://)
