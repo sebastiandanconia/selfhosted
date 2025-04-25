@@ -1,3 +1,15 @@
+/// url_rewrite_program for use with Squid Proxy
+/// 
+/// Example use within `squid.conf`:
+/// ----------
+/// url_rewrite_program /etc/squid/bin/url-mapper
+/// ...
+/// ----------
+///
+/// Remember also to list authorized access tokens in `/etc/squid/ipp_access_tokens`,
+/// or to set the IPP_ACCESS_TOKEN_FILE environmental variable appropriately.
+/// 
+
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
@@ -6,6 +18,7 @@ use regex::Regex;
 use const_format::concatcp;
 
 const ACCESS_TOKEN_FILE_DEFAULT: &str = "/etc/squid/ipp_access_tokens";
+const ACCESS_TOKEN_ENV: &str = "IPP_ACCESS_TOKEN_FILE";
 
 // Terminology
 // ----------
@@ -55,7 +68,7 @@ fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 
-    let access_token_file = env::var("IPP_ACCESS_TOKEN_FILE")
+    let access_token_file = env::var(ACCESS_TOKEN_ENV)
                                         .unwrap_or(ACCESS_TOKEN_FILE_DEFAULT.to_string());
 
     // "Access tokens" are what the client sends us in an attempt to authenticate, and which we
@@ -144,6 +157,8 @@ mod tests {
         assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/ipp/AAAAAAAA", "11.11.11.11", "-", "GET"), None);
 
         // test_transform_bad_url()
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11", "11.11.11.11", "-", "GET"), None);
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/", "11.11.11.11", "-", "GET"), None);
         assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/krugman/YYYYYYYY", "11.11.11.11", "-", "GET"), None);
     }
 
