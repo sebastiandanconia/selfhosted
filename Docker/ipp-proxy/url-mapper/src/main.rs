@@ -27,8 +27,9 @@ const ACCESS_TOKEN_ENV: &str = "IPP_ACCESS_TOKEN_FILE";
 
 // Authentication keys consist of numbers, letters, hyphens, and underscores, 8 to 80 characters in length.
 const ACCESS_TOKEN_PATTERN: &str = "[0-9A-Za-z_-]{8,80}";
-// Equivalent to format!("^((?:ipps?|https?)://[^/]+)(/ipp/({token}).*)$", token = &ACCESS_TOKEN_PATTERN)
-const FRONTEND_URL_PATTERN: &str = concatcp!("^((?:ipps?|https?)://[^/]+)(/ipp/(", ACCESS_TOKEN_PATTERN, ").*)$");
+// Equivalent to format!("^((?:ipps?|https?)://[^/]+)(/ipp/({token})(?:/.*)?)$", token = &ACCESS_TOKEN_PATTERN)
+// IPP exclusively uses HTTP POST, so we don't need to accept '?', '&', etc. in a URL.
+const FRONTEND_URL_PATTERN: &str = concatcp!("^((?:ipps?|https?)://[^/]+)(/ipp/(", ACCESS_TOKEN_PATTERN, ")(?:/.*)?)$");
 // Replace the path portion of the URL with this string
 const BACKEND_PATH: &str = "${1}/ipp/print";
 
@@ -45,8 +46,14 @@ impl UrlTransform {
         UrlTransform { credentials_db: access_tokens, url_regex, backend_path: backend_path.to_string() }
     }
 
-    fn transform(&self, _channel: &str, url: &str, _ip: &str, _ident: &str, _method: &str) -> Option<String> {
+    fn transform(&self, _channel: &str, url: &str, _ip: &str, _ident: &str, method: &str) -> Option<String> {
         let mut new_url = None;
+
+        if method != "POST" {
+            // IPP requests should always use HTTP POST
+            return None;
+        }
+
         // Check that the Auth Token in the URL is valid
         if !self.credentials_db.is_empty() {
             if self.url_regex.is_match(url) {
@@ -150,16 +157,18 @@ mod tests {
         );
 
         // test_transform_good()
-        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/ipp/YYYYYYYY", "11.11.11.11", "-", "GET"), Some("ipps://11.11.11.11/ipp/print".to_string()));
-        assert_eq!(url_transform.transform("1", "https://11.11.11.11/ipp/YYYYYYYY/", "11.11.11.11", "-", "GET"), Some("https://11.11.11.11/ipp/print".to_string()));
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/ipp/YYYYYYYY", "11.11.11.11", "-", "POST"), Some("ipps://11.11.11.11/ipp/print".to_string()));
+        assert_eq!(url_transform.transform("1", "https://11.11.11.11/ipp/YYYYYYYY/", "11.11.11.11", "-", "POST"), Some("https://11.11.11.11/ipp/print".to_string()));
 
         // test_transform_unknown_token()
-        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/ipp/AAAAAAAA", "11.11.11.11", "-", "GET"), None);
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/ipp/AAAAAAAA", "11.11.11.11", "-", "POST"), None);
 
         // test_transform_bad_url()
-        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11", "11.11.11.11", "-", "GET"), None);
-        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/", "11.11.11.11", "-", "GET"), None);
-        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/krugman/YYYYYYYY", "11.11.11.11", "-", "GET"), None);
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11", "11.11.11.11", "-", "POST"), None);
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/", "11.11.11.11", "-", "POST"), None);
+        assert_eq!(url_transform.transform("1", "ipps://11.11.11.11/krugman/YYYYYYYY", "11.11.11.11", "-", "POST"), None);
+        assert_eq!(url_transform.transform("1", "https://11.11.11.11/ipp/YYYYYYYY#gg", "11.11.11.11", "-", "POST"), None);
+        assert_eq!(url_transform.transform("1", "https://11.11.11.11/ipp/YYYYYYYY?username=admin'%20OR%20'1'='1&password=anything", "11.11.11.11", "-", "POST"), None);
     }
 
 }
