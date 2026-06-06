@@ -20,7 +20,6 @@ docker run -p 8000:8000 -e ICECAST_SOURCE_PASSWORD=aaaa -e ICECAST_ADMIN_PASSWOR
 Run with custom configuration
 
 ```bash
-docker run -p 8000:8000 -v /local/path/to/icecast/config:/etc/icecast2 sebastiandanconia/icecast
 docker run -p 8000:8000 -v /local/path/to/icecast.xml:/etc/icecast2/icecast.xml sebastiandanconia/icecast
 ```
 
@@ -37,14 +36,17 @@ Docker-compose
 icecast:
   image: sebastiandanconia/icecast
   volumes:
-  - logs:/var/log/icecast2
-  - /etc/localtime:/etc/localtime:ro
+    # Optional, but useful for advanced configurations
+    - /srv/docker/volumes/icecast/icecast.xml:/etc/icecast2/icecast.xml
+    - logs:/var/log/icecast2
   environment:
-  - ICECAST_SOURCE_PASSWORD=aaa
-  - ICECAST_ADMIN_PASSWORD=bbb
-  - ICECAST_PASSWORD=ccc
-  - ICECAST_RELAY_PASSWORD=ddd
-  - ICECAST_HOSTNAME=noise.example.com
+    # Uses the host's $TZ variable, or defaults to UTC
+    - TZ=${TZ:-UTC}
+    - ICECAST_SOURCE_PASSWORD=aaa
+    - ICECAST_ADMIN_PASSWORD=bbb
+    - ICECAST_PASSWORD=ccc
+    - ICECAST_RELAY_PASSWORD=ddd
+    - ICECAST_HOSTNAME=noise.example.com
   ports:
-  - 8000:8000
+    - 8000:8000
 ```

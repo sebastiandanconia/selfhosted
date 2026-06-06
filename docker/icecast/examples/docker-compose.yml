@@ -1,12 +1,15 @@
 icecast:
   image: sebastiandanconia/icecast:latest
   volumes:
-  - logs:/var/log/icecast2
-  - /etc/localtime:/etc/localtime:ro
+    # Optional, but useful for advanced configurations
+    - /srv/docker/volumes/icecast/icecast.xml:/etc/icecast2/icecast.xml
+    - logs:/var/log/icecast2
   environment:
-  - ICECAST_SOURCE_PASSWORD=changeme
-  - ICECAST_ADMIN_PASSWORD=changeme
-  - ICECAST_PASSWORD=changeme
-  - ICECAST_RELAY_PASSWORD=changeme
+    # Uses the host's $TZ variable, or defaults to UTC
+    - TZ=${TZ:-UTC}
+    - ICECAST_SOURCE_PASSWORD=changeme
+    - ICECAST_ADMIN_PASSWORD=changeme
+    - ICECAST_PASSWORD=changeme
+    - ICECAST_RELAY_PASSWORD=changeme
   ports:
-  - 8000:8000
+    - 8000:8000
