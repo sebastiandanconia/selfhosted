@@ -1,37 +1,34 @@
-# Icecast Docker Container
+# Icecast Docker Image
 
-Icecast2 Dockerfile
+Multi-architecture Docker image for [Icecast](https://icecast.org/) streaming server.
 
-## Run
+Derived from [moul/docker-icecast](https://github.com/moul/docker-icecast).
 
-Run with default password, export port 8000
+## Quick Start
 
+Run MPD with default settings:
 ```bash
+docker pull sebastiandanconia/icecast
 docker run -p 8000:8000 sebastiandanconia/icecast
-$BROWSER localhost:8000
 ```
 
-Run with custom password
+OR
 
+Run MPD with some custom settings:
 ```bash
 docker run -p 8000:8000 -e ICECAST_SOURCE_PASSWORD=aaaa -e ICECAST_ADMIN_PASSWORD=bbbb -e ICECAST_PASSWORD=cccc -e ICECAST_RELAY_PASSWORD=dddd -e ICECAST_HOSTNAME=noise.example.com sebastiandanconia/icecast
 ```
 
-Run with custom configuration
+OR
 
+Run MPD with fully customizable settings:
 ```bash
 docker run -p 8000:8000 -v /local/path/to/icecast.xml:/etc/icecast2/icecast.xml sebastiandanconia/icecast
 ```
 
-Extends Dockerfile
+OR
 
-```Dockerfile
-FROM sebastiandanconia/icecast
-ADD ./icecast.xml /etc/icecast2
-```
-
-Docker-compose
-
+Run MPD using `docker compose`:
 ```yaml
 icecast:
   image: sebastiandanconia/icecast
@@ -50,3 +47,70 @@ icecast:
   ports:
     - 8000:8000
 ```
+
+OR
+
+Build your configuration file into an image:
+```Dockerfile
+FROM sebastiandanconia/icecast
+ADD ./icecast.xml /etc/icecast2
+```
+
+## Supported Architectures
+
+| Architecture | Tag |
+|--------------|-----|
+| x86_64 (amd64) | `sebastiandanconia/icecast:latest` |
+| ARM64 (aarch64) | `sebastiandanconia/icecast:latest` |
+
+Docker automatically selects the correct architecture for your system.
+
+## Building Locally
+
+### Multi-Architecture Build (requires Docker Buildx)
+
+```bash
+# Create a builder instance (one-time setup)
+docker buildx create --name multiarch --driver docker-container --use
+
+# Build and push multi-arch image
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --tag sebastiandanconia/icecast:latest \
+  --push \
+  .
+```
+
+### Single Architecture Build
+
+```bash
+docker build -t sebastiandanconia/icecast:latest .
+docker push sebastiandanconia/icecast:latest
+```
+
+## CI/CD
+
+This repository uses GitHub Actions to automatically build and push multi-architecture images.
+
+### Required Secrets
+
+Configure these in your GitHub repository settings → Secrets and variables → Actions:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token ([create one here](https://hub.docker.com/settings/security)) |
+
+## Configuration
+
+Mount your Icecast configuration:
+
+```bash
+docker run -p 8000:8000 \
+  -v /path/to/icecast.xml:/etc/icecast2/icecast.xml \
+  sebastiandanconia/icecast
+```
+
+## License
+
+See original project: https://github.com/moul/docker-icecast
