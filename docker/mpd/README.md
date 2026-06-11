@@ -14,24 +14,35 @@ This fork adds an entrypoint script that adjusts the `mpd` user's UID/GID at con
 
 ## Usage
 
+If you want the machine on which you're running Docker to be able to output audio locally (for example to directly-connected speakers), you may need to set `ADD_GIDS` to the Group ID of the `audio` group on your host computer.
+
+### Docker Compose
+
 ```yaml
 services:
   mpd:
-    build: sebastiandanconia/mpd
+    image: sebastiandanconia/mpd
+    restart: unless-stopped
     environment:
-      - PUID=1000  # Match your host user
-      - PGID=1000  # Match your host group
+      - TZ=${TZ:-UTC}
+      - PUID="1000"  # Match your host user
+      - PGID="1000"  # Match your host group
+      # Optional comma-separated list of groups of which mpd should be a member
+      # - ADD_GIDS="18,29"
+      # For ALSA audio, set ADD_GIDS=$(getent group audio | cut -d: -f3)
+      # - ADD_GIDS="${HOST_AUDIO_GID}"
+    cap_add:
+      - SYS_NICE
     volumes:
-      - ./music:/var/lib/mpd/music:ro
-      - ./playlists:/var/lib/mpd/playlists:rw
-      - ./data:/var/lib/mpd/data:rw
+      - mpd-data:/var/lib/mpd:rw,delegated
+      - mpd-music:/var/lib/mpd/music:ro
+      - mpd-playlists:/var/lib/mpd/playlists:rw
+      - path/to/mpd.conf:/etc/mpd.conf
     ports:
       - 6600:6600  # MPD client
       - 8000:8000  # HTTP stream
     devices:
       - /dev/snd:/dev/snd
-    group_add:
-      - audio  # Or use the numeric GID from: getent group audio | cut -d: -f3
 ```
 
 ## Environment Variables
@@ -40,6 +51,7 @@ services:
 |----------|---------|-------------|
 | `PUID`   | `1000`  | User ID for the `mpd` process |
 | `PGID`   | `1000`  | Group ID for the `mpd` process |
+|  ADD_GIDS|  ""     | Additional Group IDs for the `mpd` process |
 
 ## How It Works
 

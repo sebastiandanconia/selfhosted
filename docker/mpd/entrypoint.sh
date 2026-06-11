@@ -1,82 +1,87 @@
 #!/bin/sh
-
-# ------------------------------------------------------------
-# MPD dynamic user/group setup script (PUID/PGID support)
-# Works on Alpine Linux (tobi312/rpi-mpd:alpine and similar)
-# ------------------------------------------------------------
+# ================================================================
+# MPD Docker Entrypoint
+# Supports dynamic PUID/PGID and supplementary groups (ADD_GIDS)
+# ================================================================
 
 set -e
 
-# Default values (change if you prefer different defaults)
-PUID=${PUID:-1000}
-PGID=${PGID:-1000}
+# User/Group IDs for MPD (default values)
+# Sanitize inputs to remove any surrounding quotes or extra whitespace.
+# This makes the script robust whether values are quoted or unquoted in docker-compose.yml.
+PUID=$(echo "${PUID:-1000}" | tr -d '"'\' | xargs)
+PGID=$(echo "${PGID:-1000}" | tr -d '"'\' | xargs)
+# ADD_GIDS: optional comma-separated list of additional GIDs for mpd user
+ADD_GIDS=$(echo "${ADD_GIDS:-}" | tr -d '"'\' | xargs)
 
-echo "Setting up MPD user/group -> UID=${PUID} GID=${PGID}"
+echo "MPD Docker - Setting up mpd user: UID=${PUID} GID=${PGID} ADD_GIDS=${ADD_GIDS:-none}"
 
-# Create or modify group "mpd" with desired PGID
+# Ensure mpd group exists with correct GID
 if ! getent group mpd >/dev/null; then
-    # Group doesn't exist → create it
-    addgroup -g "${PGID}" mpd
+    groupadd -g "${PGID}" mpd
 else
-    # Group exists → change its GID if it's wrong
     OLD_GID=$(getent group mpd | cut -d: -f3)
     if [ "${OLD_GID}" != "${PGID}" ]; then
-        groupmod -g "${PGID}" mpd
-        echo "Changed group mpd GID ${OLD_GID} → ${PGID}"
+        groupmod -o -g "${PGID}" mpd
+        echo "Updated mpd group GID ${OLD_GID} → ${PGID}"
     fi
 fi
 
-# Create or modify user "mpd" with desired PUID
+# Ensure mpd user exists with correct UID
 if ! getent passwd mpd >/dev/null; then
-    adduser -u "${PUID}" -G mpd -D -H -s /bin/false mpd
-    echo "Created user mpd (UID ${PUID})"
+    useradd -u "${PUID}" -g mpd -o -M -s /usr/sbin/nologin mpd
+    echo "Created mpd user (UID ${PUID})"
 else
     OLD_UID=$(getent passwd mpd | cut -d: -f3)
     if [ "${OLD_UID}" != "${PUID}" ]; then
-        usermod -u "${PUID}" mpd
-        echo "Changed user mpd UID ${OLD_UID} → ${PUID}"
+        usermod -o -u "${PUID}" mpd
+        echo "Updated mpd user UID ${OLD_UID} → ${PUID}"
     fi
 fi
 
-# Ensure primary group is correctly set to "mpd" (GID = PGID)
-# This fixes the core issue where the base image has primary group "audio" (GID 18)
-CURRENT_PGID=$(getent passwd mpd | cut -d: -f4)
-if [ "${CURRENT_PGID}" != "${PGID}" ]; then
+# Ensure primary group is mpd (important on some base images)
+CURRENT_GID=$(id -g mpd)
+if [ "${CURRENT_GID}" != "${PGID}" ]; then
     usermod -g mpd mpd
-    echo "Changed mpd primary GID from ${CURRENT_PGID} to ${PGID} (group mpd)"
+    echo "Updated mpd primary group to GID ${PGID}"
 fi
 
-# Fix ownership of all MPD paths (safe even if some dirs don't exist)
+# Handle additional supplementary groups (e.g. audio group on host)
+if [ -n "${ADD_GIDS}" ]; then
+    echo "Adding supplementary groups to mpd user: ${ADD_GIDS}"
+    OLDIFS="$IFS"
+    IFS=','
+    for gid_part in ${ADD_GIDS}; do
+        gid=$(echo "$gid_part" | xargs)
+        if [ -n "$gid" ] && echo "$gid" | grep -q '^[0-9]\+$'; then
+            if ! getent group "$gid" >/dev/null 2>&1; then
+                groupadd -g "$gid" "supp${gid}" 2>/dev/null || true
+            fi
+            group_name=$(getent group "$gid" | cut -d: -f1)
+            if [ -n "$group_name" ]; then
+                usermod -aG "$group_name" mpd && \
+                    echo "Added mpd to group ${group_name} (GID=${gid})" || \
+                    echo "Warning: Failed to add mpd to group ${group_name}"
+            fi
+        else
+            echo "Warning: Invalid GID '${gid_part}' in ADD_GIDS"
+        fi
+    done
+    IFS="$OLDIFS"
+fi
+
+# Fix permissions on key directories
 chown -R "${PUID}:${PGID}" \
     /var/lib/mpd \
     /var/log/mpd \
     /run/mpd \
-    /etc/mpd.conf \
-    2>/dev/null || true
+    /etc/mpd.conf 2>/dev/null || true
 
-# IMPORTANT: Disable MPD's built-in privilege drop since gosu handles it
-sed -i '/^[[:blank:]]*user[[:blank:]]\+.*$/ s/^/#/' /etc/mpd.conf 2>/dev/null || true
-sed -i '/^[[:blank:]]*group[[:blank:]]\+.*$/ s/^/#/' /etc/mpd.conf 2>/dev/null || true
+# Disable MPD's internal privilege dropping (we use gosu instead)
+sed -i 's/^\s*user\s\+.*/#&/' /etc/mpd.conf 2>/dev/null || true
+sed -i 's/^\s*group\s\+.*/#&/' /etc/mpd.conf 2>/dev/null || true
 
+echo "User/group setup completed. Starting MPD as UID:${PUID} GID:${PGID}..."
 
-echo ""
-echo "User/group setup complete."
-echo "NOTE: For direct ALSA audio output (/dev/snd access):"
-echo "  - Pass devices in docker run/compose:"
-echo "      devices:"
-echo "        - /dev/snd:/dev/snd"
-echo "  - Add the host's audio GID as supplementary group:"
-echo "      group_add:"
-echo "        - \$(getent group audio | cut -d: -f3)  # OS dependent"
-echo "Starting MPD as UID:${PUID} GID:${PGID} ..."
-
-# Execute the original CMD as the configured user/group
-if command -v gosu >/dev/null 2>&1; then
-    exec gosu "${PUID}:${PGID}" "$@"
-elif command -v su-exec >/dev/null 2>&1; then
-    exec su-exec "${PUID}:${PGID}" "$@"
-else
-    # last resort: run as root (not recommended but works)
-    echo "Warning: neither gosu nor su-exec found – running MPD as root!"
-    exec "$@"
-fi
+# Run MPD as the target user using gosu
+exec gosu "${PUID}:${PGID}" "$@"

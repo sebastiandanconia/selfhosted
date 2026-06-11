@@ -1,4 +1,4 @@
-FROM tobi312/rpi-mpd:alpine
+FROM tobi312/rpi-mpd:debian
 
 LABEL org.opencontainers.image.authors="James Walker Crofts <20387783+sebastiandanconia@users.noreply.github.com>" \
     org.opencontainers.image.title="MPD with UID/GID Agility" \
@@ -9,14 +9,18 @@ LABEL org.opencontainers.image.authors="James Walker Crofts <20387783+sebastiand
     org.opencontainers.image.url="https://hub.docker.com/r/sebastiandanconia/certbot" \
     org.opencontainers.image.source="https://github.com/sebastiandanconia/selfhosted"
 
-# Install gosu for clean step-down from root (lighter than tini + su-exec)
-# su-exec is already in Alpine, but gosu is preferred by most
-RUN apk add --no-cache gosu shadow
+# Install gosu for clean privilege dropping + ca-certificates for HTTPS if needed later
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gosu \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
 
-# Copy our entrypoint
+# Copy entrypoint
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Keep the original non-daemon behaviour
+# Entry point runs as root to handle user/group changes, then drops privileges with gosu
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/bin/mpd", "--no-daemon", "--stdout", "/etc/mpd.conf"]
