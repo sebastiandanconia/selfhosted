@@ -10,5 +10,4 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Keep the original non-daemon behaviour
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-USER mpd
 CMD ["/usr/bin/mpd", "--no-daemon", "--stdout", "/etc/mpd.conf"]
