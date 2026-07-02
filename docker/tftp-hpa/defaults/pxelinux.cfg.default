@@ -1,0 +1,12 @@
+ui menu.c32
+menu title Network boot - no OS configured
+prompt 0
+timeout 0
+
+label reboot
+  menu label Reboot
+  com32 reboot.c32
+
+label poweroff
+  menu label Power off
+  com32 poweroff.c32

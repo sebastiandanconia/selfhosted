@@ -1,0 +1,6 @@
+#!ipxe
+echo
+echo "Network boot - no OS configured."
+echo "Dropping to iPXE shell. Type 'exit' to return to firmware."
+echo
+shell
