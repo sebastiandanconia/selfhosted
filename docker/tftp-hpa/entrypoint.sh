@@ -20,7 +20,7 @@ PGID=$(echo "${PGID:-0}" | tr -d '"'\' | xargs)
 if [ "${1:-}" = "seed" ]; then
     echo "[entrypoint] Seeding ${TFTPBOOT_DIR} from ${SEED_DIR} (existing files kept)"
     mkdir -p "${TFTPBOOT_DIR}"
-    cp -an "${SEED_DIR}"/. "${TFTPBOOT_DIR}"/
+    cp -a --update=none "${SEED_DIR}"/. "${TFTPBOOT_DIR}"/
     echo "[entrypoint] Done."
     exit 0
 fi
