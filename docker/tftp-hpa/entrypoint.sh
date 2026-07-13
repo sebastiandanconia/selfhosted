@@ -20,7 +20,14 @@ PGID=$(echo "${PGID:-0}" | tr -d '"'\' | xargs)
 if [ "${1:-}" = "seed" ]; then
     echo "[entrypoint] Seeding ${TFTPBOOT_DIR} from ${SEED_DIR} (existing files kept)"
     mkdir -p "${TFTPBOOT_DIR}"
+    # Track emptiness so we only change ownerhip of the tree when it was fully
+    # ours to begin with; on a partial populate, leave pre-existing files alone.
+    was_empty=0
+    [ -z "$(ls -A "${TFTPBOOT_DIR}" 2>/dev/null)" ] && was_empty=1
     cp -a --update=none "${SEED_DIR}"/. "${TFTPBOOT_DIR}"/
+    if [ "${was_empty}" = "1" ] && [ "${PUID}" != "0" ]; then
+        chown -R "${PUID}:${PGID}" "${TFTPBOOT_DIR}"
+    fi
     echo "[entrypoint] Done."
     exit 0
 fi
@@ -40,6 +47,10 @@ if [ "${SEED_ON_EMPTY:-1}" = "1" ]; then
             rm -f "${TFTPBOOT_DIR}/.seed-probe"
             echo "[entrypoint] ${TFTPBOOT_DIR} is empty; seeding PXE bootloaders"
             cp -a "${SEED_DIR}"/. "${TFTPBOOT_DIR}"/
+            # Honor PUID/PGID so seeded files match the host user, not root.
+            if [ "${PUID}" != "0" ]; then
+                chown -R "${PUID}:${PGID}" "${TFTPBOOT_DIR}"
+            fi
         else
             echo "[entrypoint] ${TFTPBOOT_DIR} is empty and read-only; not seeding." >&2
             echo "[entrypoint] Populate it yourself, or run: docker run --rm -v <host>:/tftpboot <image> seed" >&2

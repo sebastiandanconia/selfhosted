@@ -80,6 +80,12 @@ docker run --rm -v /srv/tftpboot:/tftpboot sebastiandanconia/tftp-hpa seed
 
 Existing files are not overwritten.
 
+### File ownership of seeded files
+
+When `PUID` is non-zero, seeded files are `chown`ed to `${PUID}:${PGID}` so they match your host user and you can manage them without `sudo`. When `PUID=0` they stay root-owned. The auto-seed on an empty, writable `/tftpboot` always `chown`s the full tree. The `seed` subcommand only `chown`s the tree when the target directory was empty beforehand; if you seed into a directory that already contains your files, your existing files keep their ownership (newly added files will be owned by `root`, so `chown` those yourself if needed).
+
+This affects ownership only; the `0444` mode that makes the bootloaders readable by the unprivileged `tftp` user is unchanged.
+
 ## Boot configuration examples
 
 The shipped defaults boot nothing (a menu offering only Reboot / Power off, with no timeout). The examples below show two netbooted hosts, each with its own kernel command line. Place your kernel/initrd files under `/tftpboot/images/`.
