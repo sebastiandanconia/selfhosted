@@ -16,6 +16,7 @@ The `docker/` directory contains specialized images and configurations for the f
 - **[Certbot](docker/certbot)**: A continuous Certbot image that uses `cron` to ensure certificates are renewed daily, ideal for NAS or headless environments.
 - **[IPP Proxy](docker/ipp-proxy)**: A secure reverse proxy for the Internet Printing Protocol (IPPS) using Squid, allowing encrypted access to printers from untrusted networks.
 - **MPD**: A Docker image for the Music Player Daemon.
+- **[DMZ networking](docker/networking)**: ipvlan-based DMZ attachment for public-facing containers on TrueNAS SCALE.
 
 ### 🦀 Rust Projects
 
