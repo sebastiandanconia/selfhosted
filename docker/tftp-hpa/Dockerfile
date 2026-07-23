@@ -1,24 +1,49 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------------------
-# Stage 1: Collect/build the PXE bootloaders.
+# Stage 1: Build/collect PXE bootloaders for x86 clients.
 #
-# Pinned to the build host platform ($BUILDPLATFORM) so the x86 BIOS and
-# x86_64 UEFI bootloaders are always produced natively, even when the final
-# image is built for arm64. The assets themselves are architecture-independent
-# blobs that boot x86/x86_64 clients regardless of which arch the server runs.
+# These loaders are x86/x86_64 code that runs on the PXE client, not on the
+# TFTP server. Build them on amd64 (native gcc). When the image itself is
+# built for arm64, Buildx runs this stage under QEMU (CI sets that up).
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS bootloader-builder
+FROM --platform=linux/amd64 ubuntu:24.04 AS bootloader-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Pin iPXE releases for reproducible TLS/crypto capability. v2.0.0 ships a
+# full TLS 1.2 client (ECDHE, ECDSA, AES-GCM, named curves / supported_groups).
+ARG IPXE_REF=v2.0.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         pxelinux \
         syslinux-common \
         grub-common \
         grub-efi-amd64-bin \
-        ipxe \
+        ca-certificates \
+        git \
+        make \
+        gcc \
+        g++ \
+        binutils \
+        perl \
+        liblzma-dev \
+        libc6-dev \
+        gcc-multilib \
     && rm -rf /var/lib/apt/lists/*
+
+# iPXE: build from upstream with improved HTTPS support (see ipxe/general.h).
+# Ubuntu's packaged iPXE is an older/minimal compile whose TLS ClientHello
+# lacks supported_groups/ec_point_formats and a modern cipher list,
+# so high-security HTTPS boot servers reject it.
+COPY ipxe/general.h /tmp/ipxe-local/general.h
+RUN set -eux; \
+    git clone --depth 1 --branch "${IPXE_REF}" https://github.com/ipxe/ipxe.git /tmp/ipxe; \
+    cp /tmp/ipxe-local/general.h /tmp/ipxe/src/config/local/general.h; \
+    make -C /tmp/ipxe/src -j"$(nproc)" \
+        bin-x86_64-efi/ipxe.efi \
+        bin/undionly.kpxe \
+        bin/ipxe.lkrn
 
 RUN set -eux; \
     mkdir -p /assets/pxelinux.cfg /assets/grub /assets/ipxe; \
@@ -37,10 +62,10 @@ RUN set -eux; \
         search search_fs_uuid search_fs_file search_label test \
         part_gpt part_msdos fat ext2 btrfs xfs loopback chain \
         videoinfo font gfxterm gettext terminal serial; \
-    # iPXE: HTTP-capable network bootloaders for UEFI and BIOS.
-    cp /usr/lib/ipxe/ipxe.efi      /assets/ipxe/ipxe.efi; \
-    cp /usr/lib/ipxe/undionly.kpxe /assets/ipxe/undionly.kpxe; \
-    [ -f /usr/lib/ipxe/ipxe.lkrn ] && cp /usr/lib/ipxe/ipxe.lkrn /assets/ipxe/ipxe.lkrn || true
+    # iPXE: HTTPS-capable network bootloaders for UEFI and BIOS.
+    cp /tmp/ipxe/src/bin-x86_64-efi/ipxe.efi /assets/ipxe/ipxe.efi; \
+    cp /tmp/ipxe/src/bin/undionly.kpxe       /assets/ipxe/undionly.kpxe; \
+    cp /tmp/ipxe/src/bin/ipxe.lkrn           /assets/ipxe/ipxe.lkrn
 
 # Safe default configs that boot nothing (no kernel, no local disk boot).
 COPY defaults/pxelinux.cfg.default /assets/pxelinux.cfg/default

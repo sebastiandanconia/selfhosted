@@ -1,8 +1,8 @@
 # tftp-hpa Docker Image (PXE-enabled)
 
-Multi-architecture Docker image running [tftp-hpa](https://git.kernel.org/pub/scm/network/tftp/tftp-hpa.git/) (the H. Peter Anvin TFTP daemon) with a curated set of PXE bootloaders for BIOS and UEFI x86_64 network booting, including iPXE for HTTP-boot chains.
+Multi-architecture Docker image running [tftp-hpa](https://git.kernel.org/pub/scm/network/tftp/tftp-hpa.git/) (the H. Peter Anvin TFTP daemon) with a curated set of PXE bootloaders for BIOS and UEFI x86_64 network booting, including iPXE for HTTP(S)-boot chains.
 
-It stays current by pulling every bootloader from Ubuntu apt packages at build time.
+Syslinux/pxelinux and GRUB come from Ubuntu apt packages at build time. iPXE is built from a pinned upstream release so its TLS stack can talk to modern high-security HTTPS boot servers.
 
 ## Design
 
@@ -18,7 +18,7 @@ Seed assets copied into an empty `/tftpboot`:
 | `ldlinux.c32`, `menu.c32`, `vesamenu.c32`, `libutil.c32`, `libcom32.c32`, `reboot.c32`, `poweroff.c32` | `syslinux-common` | Syslinux modules for menus |
 | `memdisk` | `syslinux-common` | Boot floppy/ISO images from RAM |
 | `grub/grubx64.efi` | `grub-efi-amd64-bin` (built via `grub-mkimage`, TFTP prefix `(tftp)/grub`) | UEFI x86_64 net boot; fetches `grub/grub.cfg` |
-| `ipxe/ipxe.efi`, `ipxe/undionly.kpxe`, `ipxe/ipxe.lkrn` | `ipxe` | iPXE (UEFI + BIOS), HTTP-boot capable |
+| `ipxe/ipxe.efi`, `ipxe/undionly.kpxe`, `ipxe/ipxe.lkrn` | iPXE upstream (pinned, built from source) | iPXE (UEFI + BIOS), HTTP(S) boot capable |
 | `pxelinux.cfg/default`, `grub/grub.cfg`, `ipxe/boot.ipxe` | this repo | Safe defaults that boot nothing |
 
 ## Quick start
@@ -128,16 +128,18 @@ menuentry "host-a Linux" {
 }
 ```
 
-### HTTP boot — iPXE
+### HTTP(S) boot — iPXE
 
-For HTTP-based booting, TFTP serves only the iPXE binary; iPXE then chains a script fetched over HTTP. Minimal `ipxe/boot.ipxe`:
+For HTTP(S) boot, TFTP is only the first hop: it delivers the iPXE loader and, typically, a small script such as `ipxe/boot.ipxe`. Kernels, initrds, and menus then come from HTTP or HTTPS. Example `ipxe/boot.ipxe`:
 ```
 #!ipxe
 dhcp
-chain http://boot.example.com/${mac:hex}.ipxe
+chain https://boot.example.com/${mac:hex}.ipxe
 ```
 
-Set the DHCP bootfile to `ipxe/ipxe.efi` (UEFI) or `ipxe/undionly.kpxe` (BIOS), then have iPXE chain the script above (via an embedded script or DHCP option 175).
+Set the DHCP bootfile to `ipxe/ipxe.efi` (UEFI) or `ipxe/undionly.kpxe` (BIOS), then have iPXE run that script (embedded at build time, or via DHCP option 175 — stock iPXE does not auto-fetch `boot.ipxe` by itself).
+
+The seeded iPXE binaries are built from upstream with HTTPS enabled and a modern TLS 1.2 client (ECDHE, ECDSA, AES-GCM, `supported_groups` / `ec_point_formats`).
 
 ## Known limitations
 
@@ -160,7 +162,7 @@ Multi-arch (requires buildx):
 docker buildx build --platform linux/amd64,linux/arm64 --tag sebastiandanconia/tftp-hpa:latest .
 ```
 
-The bootloader-builder stage is pinned to the build host platform (`$BUILDPLATFORM`) so the x86/x86_64 bootloaders are always produced natively; only the final stage is built per target platform.
+Bootloaders are always built in an amd64 stage (they are x86 client code). The final stage is built per target arch (amd64/arm64 tftpd). Building the arm64 image needs QEMU/binfmt so that the amd64 stage can run; GitHub Actions enables that automatically.
 
 ## CI/CD
 
